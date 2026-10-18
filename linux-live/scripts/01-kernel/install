@@ -12,6 +12,11 @@ trap 'rm -f "${TMP_PKGLIST}"' EXIT
 
 [ "${INSTALL_KERNEL}" = true ] || exit 0
 
+[ -x /kernel-acquire ] || {
+    error "Kernel acquisition and metadata helper is unavailable"
+    exit 1
+}
+
 run_with_spinner "Updating package lists" apt-get update --allow-releaseinfo-change
 run_with_spinner "Installing kernel build prerequisites" \
     apt-get install -y --no-install-recommends ca-certificates gnupg gpgv xz-utils zstd kmod
@@ -37,19 +42,8 @@ if [ "${KERNEL_PROVIDER}" = minios ]; then
         error "MiniOS kernel ${KERNEL_RELEASE} does not provide AUFS support"
         exit 1
     }
-    depmod "${KERNEL_RELEASE}"
-    sed -i '/^KERNEL=/d;/^KERNEL_VERSION=/d;/^KERNEL_BUILD_ARCH=/d' /minios_build.conf
-    {
-        printf 'KERNEL="%s"\n' "${KERNEL_RELEASE}"
-        printf 'KERNEL_VERSION="%s"\n' "${KERNEL_RELEASE}"
-        printf 'KERNEL_BUILD_ARCH="%s"\n' "${KERNEL_APT_ARCH}"
-    } >>/minios_build.conf
+    /kernel-acquire --installed-minios
     exit 0
 fi
-
-[ -x /kernel-acquire ] || {
-    error "Isolated kernel acquisition helper is unavailable"
-    exit 1
-}
 
 /kernel-acquire

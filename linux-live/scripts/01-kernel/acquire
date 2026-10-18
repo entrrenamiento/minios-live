@@ -216,6 +216,41 @@ use_local_packages() {
     : >"${REPOSITORY_TABLE}"
 }
 
+use_installed_minios_kernel() {
+    local IMAGE NAME VERSION ARCH STATUS DEB
+    local -a IMAGES=()
+
+    if [ "${KERNEL_PROVIDER}" != minios ] || [ "${KERNEL_UPDATE_POLICY}" != frozen ]; then
+        fail "Installed MiniOS kernel metadata requires the minios provider and frozen policy"
+    fi
+    mapfile -t IMAGES < <(find /boot -maxdepth 1 -type f -name 'vmlinuz-*' -print | sort)
+    [ "${#IMAGES[@]}" -eq 1 ] || fail "Installed MiniOS kernel must provide exactly one image"
+    IMAGE="${IMAGES[0]##*/vmlinuz-}"
+    NAME="linux-image-${IMAGE}"
+    IFS=$'\t' read -r VERSION ARCH STATUS < <(
+        dpkg-query -W -f='${Version}\t${Architecture}\t${db:Status-Status}\n' "${NAME}"
+    )
+    if [ "${STATUS}" != installed ] || [ "${ARCH}" != "${KERNEL_APT_ARCH}" ]; then
+        fail "Matching installed MiniOS image package is unavailable: ${NAME}"
+    fi
+
+    # The archive provides the original control scripts and package ownership.
+    # Never resolve the moving metapackage again: it may now select another ABI.
+    while IFS= read -r DEB; do
+        if [ "$(dpkg-deb -f "${DEB}" Package)" = "${NAME}" ] &&
+            [ "$(dpkg-deb -f "${DEB}" Version)" = "${VERSION}" ] &&
+            [ "$(dpkg-deb -f "${DEB}" Architecture)" = "${ARCH}" ]; then
+            cp "${DEB}" "${DOWNLOAD_DIR}/"
+            return
+        fi
+    done < <(find /var/cache/apt/archives /rootcopy-install -maxdepth 1 -type f \
+        -name 'linux-image-*.deb' -print 2>/dev/null | sort)
+    (
+        cd "${DOWNLOAD_DIR}"
+        apt-get download "${NAME}:${ARCH}=${VERSION}"
+    )
+}
+
 package_has() {
     local ROOT="$1"
     local PATTERN="$2"
@@ -660,7 +695,12 @@ main() {
     require_commands
     mkdir -p "${CACHE_DIR}" "${DOWNLOAD_DIR}" "${APT_ROOT}"
     rm -rf "${SUPPORT_DIR}"
-    if ! use_local_packages; then
+    if [ "${1:-}" = --installed-minios ]; then
+        information "Collecting the exact installed MiniOS kernel archive"
+        use_installed_minios_kernel
+    elif [ "$#" -ne 0 ]; then
+        fail "Unknown kernel acquisition mode: $*"
+    elif ! use_local_packages; then
         information "Configuring isolated kernel repositories"
         configure_repositories
         information "Resolving and downloading the kernel package closure"

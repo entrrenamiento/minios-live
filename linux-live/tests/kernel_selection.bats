@@ -351,6 +351,80 @@ EOF
     [[ "${output}" != *'"provider"'* ]]
 }
 
+@test "MiniOS metadata uses the cached exact installed image archive" {
+    local acquire="${LIVE_ROOT}/scripts/01-kernel/acquire"
+    local body package="${BATS_TEST_TMPDIR}/package"
+    mkdir -p "${package}/DEBIAN" "${BATS_TEST_TMPDIR}/downloads"
+    cat >"${package}/DEBIAN/control" <<'EOF'
+Package: linux-image-6.12.105-mos-686
+Version: 6.12.105-1+mos1
+Architecture: i386
+Maintainer: MiniOS <team@minios.dev>
+Description: Test MiniOS image
+EOF
+    dpkg-deb --build "${package}" "${BATS_TEST_TMPDIR}/image.deb"
+    body="$(awk '/^use_installed_minios_kernel\(\)/,/^}/' "${acquire}")"
+
+    run env WORK="${BATS_TEST_TMPDIR}" DOWNLOAD_DIR="${BATS_TEST_TMPDIR}/downloads" \
+        KERNEL_PROVIDER=minios KERNEL_UPDATE_POLICY=frozen KERNEL_APT_ARCH=i386 \
+        bash -euc '
+            fail() { printf "%s\n" "$*" >&2; exit 1; }
+            find() {
+                if [ "$1" = /boot ]; then
+                    printf "/boot/vmlinuz-6.12.105-mos-686\n"
+                else
+                    printf "%s/image.deb\n" "${WORK}"
+                fi
+            }
+            dpkg-query() { printf "6.12.105-1+mos1\ti386\tinstalled\n"; }
+            apt-get() { exit 99; }
+            eval "$1"
+            use_installed_minios_kernel
+        ' bash "${body}"
+
+    [ "${status}" -eq 0 ]
+    cmp "${BATS_TEST_TMPDIR}/image.deb" "${BATS_TEST_TMPDIR}/downloads/image.deb"
+}
+
+@test "MiniOS metadata downloads the installed ABI and version instead of the moving meta" {
+    local acquire="${LIVE_ROOT}/scripts/01-kernel/acquire"
+    local body
+    body="$(awk '/^use_installed_minios_kernel\(\)/,/^}/' "${acquire}")"
+    mkdir -p "${BATS_TEST_TMPDIR}/downloads"
+
+    run env DOWNLOAD_DIR="${BATS_TEST_TMPDIR}/downloads" \
+        KERNEL_PROVIDER=minios KERNEL_UPDATE_POLICY=frozen KERNEL_APT_ARCH=amd64 \
+        bash -euc '
+            fail() { printf "%s\n" "$*" >&2; exit 1; }
+            find() { [ "$1" != /boot ] || printf "/boot/vmlinuz-6.12.105-mos-amd64\n"; }
+            dpkg-query() { printf "6.12.105-1+mos1\tamd64\tinstalled\n"; }
+            apt-get() { printf "%s\n" "$@"; }
+            eval "$1"
+            use_installed_minios_kernel
+        ' bash "${body}"
+
+    [ "${status}" -eq 0 ]
+    [ "${output}" = $'download\nlinux-image-6.12.105-mos-amd64:amd64=6.12.105-1+mos1' ]
+}
+
+@test "MiniOS metadata rejects a different installed package architecture" {
+    local acquire="${LIVE_ROOT}/scripts/01-kernel/acquire"
+    local body
+    body="$(awk '/^use_installed_minios_kernel\(\)/,/^}/' "${acquire}")"
+
+    run env KERNEL_PROVIDER=minios KERNEL_UPDATE_POLICY=frozen KERNEL_APT_ARCH=i386 \
+        bash -euc '
+            fail() { printf "%s\n" "$*" >&2; exit 1; }
+            find() { printf "/boot/vmlinuz-6.12.105-mos-686\n"; }
+            dpkg-query() { printf "6.12.105-1+mos1\tamd64\tinstalled\n"; }
+            eval "$1"
+            use_installed_minios_kernel
+        ' bash "${body}"
+
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"Matching installed MiniOS image package is unavailable"* ]]
+}
+
 @test "kernel release series parser selects Linux 6.12 exactly" {
     local build_script="${LIVE_ROOT}/scripts/01-kernel/build"
     local body
