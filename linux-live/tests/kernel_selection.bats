@@ -144,7 +144,7 @@ make_grub_module_fixture() {
         >"${work}/image/minios/boot/grub/i386-efi/modinfo.sh"
 }
 
-@test "automatic Trixie i386 selection uses tracked Bookworm kernel" {
+@test "automatic Trixie i386 selection overrides the distribution provider" {
     DISTRIBUTION=trixie
     DISTRIBUTION_PROFILE=debian
     DISTRIBUTION_ARCH=i386
@@ -158,12 +158,62 @@ make_grub_module_fixture() {
 
     resolve_kernel_selection
 
-    [ "${KERNEL_SOURCE_SUITE}" = bookworm ]
+    [ "${KERNEL_PROVIDER}" = minios ]
+    [ "${KERNEL_SOURCE_SUITE}" = trixie ]
     [ "${KERNEL_ARCH}" = 686 ]
     [ "${KERNEL_APT_ARCH}" = i386 ]
-    [ "${KERNEL_METAPACKAGE}" = linux-image-686 ]
-    [ "${KERNEL_REQUEST}" = linux-image-686:i386 ]
-    [ "${KERNEL_UPDATE_POLICY}" = track ]
+    [ "${KERNEL_METAPACKAGE}" = linux-image-6.12-mos-686 ]
+    [ "${KERNEL_REQUEST}" = linux-image-6.12-mos-686 ]
+    [ "${KERNEL_UPDATE_POLICY}" = frozen ]
+    [ "${KERNEL_PACKAGE_VERSION}" = "" ]
+    [ "${KERNEL_SNAPSHOT_DATE}" = "" ]
+}
+
+@test "automatic Trixie-based i386 selection overrides saved distribution defaults for both flavours" {
+    local suite flavour
+    for suite in trixie excalibur; do
+        for flavour in 686 686-pae; do
+            DISTRIBUTION="${suite}"
+            DISTRIBUTION_PROFILE=debian
+            [ "${suite}" != excalibur ] || DISTRIBUTION_PROFILE=devuan
+            DISTRIBUTION_ARCH=i386
+            DEFAULT_KERNEL_ARCH="${flavour}"
+            KERNEL_PROVIDER=distribution
+            KERNEL_AUTO_SELECT=true
+
+            resolve_kernel_selection
+
+            [ "${KERNEL_PROVIDER}" = minios ]
+            [ "${KERNEL_SOURCE_SUITE}" = trixie ]
+            [ "${KERNEL_APT_ARCH}" = i386 ]
+            [ "${KERNEL_METAPACKAGE}" = "linux-image-6.12-mos-${flavour}" ]
+            [ "${KERNEL_UPDATE_POLICY}" = frozen ]
+        done
+    done
+}
+
+@test "automatic distribution selection remains available for Trixie amd64 and Bookworm i386" {
+    local target
+    for target in trixie bookworm; do
+        DISTRIBUTION="${target}"
+        DISTRIBUTION_PROFILE=debian
+        if [ "${target}" = trixie ]; then
+            DISTRIBUTION_ARCH=amd64
+            DEFAULT_KERNEL_ARCH=amd64
+        else
+            DISTRIBUTION_ARCH=i386
+            DEFAULT_KERNEL_ARCH=686
+        fi
+        KERNEL_PROVIDER=distribution
+        KERNEL_AUTO_SELECT=true
+
+        resolve_kernel_selection
+
+        [ "${KERNEL_PROVIDER}" = distribution ]
+        [ "${KERNEL_SOURCE_SUITE}" = "${target}" ]
+        [ "${KERNEL_METAPACKAGE}" = "linux-image-${DEFAULT_KERNEL_ARCH}" ]
+        [ "${KERNEL_UPDATE_POLICY}" = track ]
+    done
 }
 
 @test "automatic i386-pae compatibility mapping selects Bookworm PAE" {

@@ -64,6 +64,14 @@ resolve_kernel_selection() {
     esac
     KERNEL_AUTO_SELECT="${AUTO_VALUE}"
 
+    # Trixie no longer provides an i386 distribution kernel. Resolve this here,
+    # including explicit distribution defaults in saved/generated build.conf.
+    if [ "${KERNEL_AUTO_SELECT}" = true ] &&
+        [ "$(kernel_debian_base_suite "${DISTRIBUTION}")" = trixie ] &&
+        [ "${DISTRIBUTION_ARCH}" = i386 ]; then
+        KERNEL_PROVIDER=minios
+    fi
+
     if [ "${KERNEL_PROVIDER}" = minios ]; then
         if [ "${KERNEL_AUTO_SELECT}" = true ]; then
             KERNEL_ARCH="${DEFAULT_KERNEL_ARCH}"
@@ -85,7 +93,7 @@ resolve_kernel_selection() {
         [ "${DISTRIBUTION_PROFILE}" = "ubuntu" ] && KERNEL_SOURCE_SUITE="${DISTRIBUTION}"
         if [ "${DISTRIBUTION_ARCH}" = "i386" ]; then
             case "${KERNEL_SOURCE_SUITE}" in
-            trixie | forky | testing | sid) KERNEL_SOURCE_SUITE=bookworm ;;
+            forky | testing | sid) KERNEL_SOURCE_SUITE=bookworm ;;
             esac
         fi
         KERNEL_PACKAGE_VERSION=""
