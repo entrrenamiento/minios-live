@@ -196,6 +196,24 @@ DRACUT_CMD=(
     --hardlink
 )
 
+# Bundled musl executables have their own complete library closure. Add them
+# after Dracut's lazy dependency scan, which resolves against the build root
+# and cannot resolve this private loader (or may use a same-named host binary).
+unset MINIOS_CRYPT_PAYLOAD_DIR
+if [ "$CRYPT" = true ]; then
+    CRYPT_PAYLOAD="${DRACUT_MOS%/dracut-mos}/livekit-mos"
+    [ "$DRACUT_MOS" != /run/initramfs/dracut-mos ] || CRYPT_PAYLOAD=/run/initramfs
+    mkdir -p "$DRACUT_BASE/bundled-crypt"
+    if (
+        source "$DRACUT_MOS/90minios/module-setup.sh"
+        initdir="$DRACUT_BASE/bundled-crypt"
+        install_bundled_crypt "$CRYPT_PAYLOAD"
+    ); then
+        export MINIOS_CRYPT_PAYLOAD_DIR="$DRACUT_BASE/bundled-crypt"
+        DRACUT_CMD+=(--include "$MINIOS_CRYPT_PAYLOAD_DIR" /)
+    fi
+fi
+
 # Add debug mode
 if [ "$DEBUG" = "true" ]; then
     DRACUT_CMD+=(--verbose --debug)

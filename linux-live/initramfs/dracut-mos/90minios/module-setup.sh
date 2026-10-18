@@ -63,8 +63,14 @@ install() {
     printf '%s\n' 'perch-storage-v1' >"${initdir}/etc/minios-initramfs-storage"
 
     if [ "$MINIOS_CRYPT" = "true" ]; then
-        install_bundled_crypt "${STATIC_BIN%/bin}" ||
-            inst_multiple cryptsetup || return 1
+        if [ -n "${MINIOS_CRYPT_PAYLOAD_DIR:-}" ]; then
+            # mkdracut includes the verified bundled closure after dependency
+            # resolution; do not expose musl binaries to the host resolver.
+            [ -x "$MINIOS_CRYPT_PAYLOAD_DIR/usr/sbin/cryptsetup" ] || return 1
+        else
+            install_bundled_crypt "${STATIC_BIN%/bin}" ||
+                inst_multiple cryptsetup || return 1
+        fi
         printf '%s\n' 'luks-layer-v1' >"${initdir}/etc/minios-initramfs-crypt"
     fi
 

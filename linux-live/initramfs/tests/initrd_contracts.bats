@@ -489,7 +489,7 @@ exercise_module_payload() (
     MODULE_FAIL=$1
     inst_multiple() { return "$MODULE_FAIL"; }
     MINIOS_CRYPT=true
-    if [ "$MODULE_FAIL" -eq 0 ]; then
+    if [ "$MODULE_FAIL" -eq 0 ] || [ -n "${MINIOS_CRYPT_PAYLOAD_DIR:-}" ]; then
         install >/dev/null 2>&1 || true
         [ -f "$initdir/etc/minios-initramfs-crypt" ]
     else
@@ -503,6 +503,21 @@ exercise_module_payload() (
     [ "$status" -eq 0 ]
     run exercise_module_payload 1
     [ "$status" -eq 0 ]
+}
+
+@test "Dracut defers bundled musl crypto until after host dependency resolution" {
+    export MINIOS_CRYPT_PAYLOAD_DIR="$WORK/deferred-crypt"
+    mkdir -p "$MINIOS_CRYPT_PAYLOAD_DIR/usr/sbin"
+    touch "$MINIOS_CRYPT_PAYLOAD_DIR/usr/sbin/cryptsetup"
+    chmod 755 "$MINIOS_CRYPT_PAYLOAD_DIR/usr/sbin/cryptsetup"
+
+    # Host cryptsetup installation fails: a staged private closure must still
+    # enable crypto, without copying an executable into the lazy-scan tree.
+    run exercise_module_payload 1
+    [ "$status" -eq 0 ]
+    [ -f "$WORK/module-1/etc/minios-initramfs-crypt" ]
+    [ ! -e "$WORK/module-1/usr/sbin/cryptsetup" ]
+    contains "$ROOT/dracut-mos/mkdracut" 'DRACUT_CMD+=(--include "$MINIOS_CRYPT_PAYLOAD_DIR" /)'
 }
 
 @test "bundled crypto payload copies with a complete runnable closure" {
