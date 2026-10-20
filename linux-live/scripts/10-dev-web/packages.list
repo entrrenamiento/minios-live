@@ -24,3 +24,6 @@ falkon
 gstreamer1.0-plugins-base
 gstreamer1.0-plugins-good
 gstreamer1.0-libav
+# ---- Para instalar OpenCode durante el build (HTTPS) ----
+curl
+ca-certificates
