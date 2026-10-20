@@ -1,0 +1,61 @@
+#!/bin/bash
+# ============================================================
+# Modulo 10-dev-web: instala dev C++ + navegador + OpenCode
+# Se ejecuta dentro del chroot durante build-modules.
+# ============================================================
+set -e
+set -o pipefail
+set -u
+
+. /minioslib || exit 1
+console_colors
+. /minios_build.conf || exit 1
+
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+
+# ------------------------------------------------------------
+# 1) Paquetes del sistema via CondinAPT
+#    (C++, Geany, navegador, codigos de video)
+# ------------------------------------------------------------
+/condinapt \
+  -l "${SCRIPT_DIR}/packages.list" \
+  -c "${SCRIPT_DIR}/minios_build.conf" \
+  -m "${SCRIPT_DIR}/condinapt.map"
+
+# ------------------------------------------------------------
+# 2) Agente OpenCode (binario unico, modelos gratis incluidos)
+# ------------------------------------------------------------
+if ! command -v opencode >/dev/null 2>&1; then
+  echo "${INFO}Instalando OpenCode...${NC}"
+
+  # Variables del entorno de CI que pueden confundir al instalador
+  unset GITHUB_ACTIONS GITHUB_PATH 2>/dev/null || true
+
+  # Instalador oficial (binario). --no-modify-path evita tocar el shell.
+  curl -fsSL https://opencode.ai/v2/install | bash -s -- --no-modify-path || true
+
+  # El instalador lo coloca en el home de root; hacerlo visible para todos.
+  for p in /root/.opencode/bin/opencode /root/.local/bin/opencode /root/.opencode/bin/opencode-*; do
+    if [ -x "$p" ]; then
+      install -m 755 "$p" /usr/local/bin/opencode
+      break
+    fi
+  done
+
+  if command -v opencode >/dev/null 2>&1; then
+    echo "${OK}OpenCode instalado en /usr/local/bin/opencode${NC}"
+  else
+    echo "${WARNING}AVISO: OpenCode pudo no instalarse ahora. Se reinstala en el primer arranque.${NC}"
+    # Respaldo: reinstalar en el primer boot del usuario
+    cat > /etc/profile.d/opencode-firstboot.sh <<'EOF'
+#!/bin/sh
+if ! command -v opencode >/dev/null 2>&1; then
+  curl -fsSL https://opencode.ai/v2/install | bash -s -- --no-modify-path >/dev/null 2>&1 || true
+  [ -x "$HOME/.opencode/bin/opencode" ] && sudo install -m 755 "$HOME/.opencode/bin/opencode" /usr/local/bin/opencode
+fi
+EOF
+    chmod +x /etc/profile.d/opencode-firstboot.sh
+  fi
+fi
+
+echo "${OK}Modulo 10-dev-web completado${NC}"

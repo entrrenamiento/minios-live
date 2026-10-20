@@ -1,0 +1,26 @@
+# ============================================================
+# MiniOS personalizado: C++ + Navegacion + OpenCode
+# Sintaxis CondinAPT. '---' separa colas de instalacion (en fases).
+# ============================================================
+
+# ---- Herramientas de C++ ----
+build-essential
+cmake
+git
+gdb
+pkg-config
+---
+# ---- IDE ligero (Geany) mas pequeno y moderno que Code::Blocks ----
+geany
+---
+# ---- Navegadores ----
+# Firefox: fiable, motor Gecko. Zoom/Gmail/YouTube garantizados. ~200-250 MB instalado.
+firefox-esr +dp=debian || firefox +dp=ubuntu
+# Falkon: alternativa, motor Chromium (via QtWebEngine). ~150-180 MB instalado.
+#   NOTA honesta: al traer Chromium embebido, el ahorro real vs Firefox es ~50 MB, no 150.
+#   Pruebalo en QEMU con Zoom/Gmail/YouTube. Si te va bien, borra la linea de Firefox de arriba.
+falkon
+# ---- Codigos de video para YouTube ----
+gstreamer1.0-plugins-base
+gstreamer1.0-plugins-good
+gstreamer1.0-libav
